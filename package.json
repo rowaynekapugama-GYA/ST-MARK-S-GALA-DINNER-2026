@@ -1,9 +1,6 @@
 {
   "name": "stmarks-smile-landing",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "St Mark's Gala — Free Smile Consultation landing page for Haberfield Dental Practice, with SmileOx CRM form intake.",
-  "dependencies": {
-    "nodemailer": "^6.9.14"
-  }
+  "description": "St Mark's Gala — Free Smile Consultation landing page for Haberfield Dental Practice, with SmileOx CRM form intake via SMTP2GO."
 }

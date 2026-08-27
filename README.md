@@ -5,18 +5,17 @@ Haberfield Dental Practice · Free Smile Consultation for the St Mark's communit
 A single-page campaign landing page matching book.haberfielddentists.com.au, with a
 registration form connected to SmileOx CRM via the email intake integration.
 
-Flow: form → POST /api/submit → serverless function → TLS SMTP email (JSON body)
-→ SmileOx intake address → lead created in the St Mark's Community pipeline.
+Flow: form → POST /api/submit → serverless function → SMTP2GO API (HTTPS)
+→ TLS email delivery to the SmileOx intake address → lead created in the
+St Mark's Community pipeline.
 
 ## Deploy (Vercel)
 1. Push this folder to a repo (or `vercel deploy` directly).
 2. Set environment variables in Vercel project settings:
-   - SMTP_HOST     e.g. smtp provider host
-   - SMTP_PORT     465 (default)
-   - SMTP_USER     SMTP username
-   - SMTP_PASS     SMTP password
-   - SMTP_FROM     no-reply@haberfielddentists.com.au (or preferred sender)
-   TLS is enforced in code (secure: true) — required by SmileOx intake.
+   - SMTP2GO_API_KEY   your SMTP2GO API key
+   - SMTP_FROM         no-reply@haberfielddentists.com.au (sender; the domain
+                       must be verified in the SMTP2GO dashboard)
+   Delivery runs over the SMTP2GO HTTPS API with TLS enforced end to end.
 3. Deploy. Suggested domain: stmarks.haberfielddentists.com.au or
    book.haberfielddentists.com.au/st-marks (via rewrite).
 

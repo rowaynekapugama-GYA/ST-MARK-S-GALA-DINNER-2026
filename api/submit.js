@@ -1,11 +1,12 @@
 // /api/submit — Vercel serverless function
 // Receives the landing page form POST and forwards it to the SmileOx
-// CRM intake address as a plain-text JSON email over TLS SMTP.
-
-import nodemailer from "nodemailer";
+// CRM intake address as a plain-text JSON email via the SMTP2GO API.
+// TLS is enforced end to end: HTTPS to SMTP2GO, TLS delivery to the intake domain.
 
 const INTAKE_ADDRESS =
   "st-marks-community+61e0a4c0-6810-448e-9607-d24bc54571c6@intake.smileox.com.au";
+
+const SMTP2GO_ENDPOINT = "https://api.smtp2go.com/v3/email/send";
 
 const MAX_FIELD_LENGTH = 500;
 
@@ -15,10 +16,40 @@ function clean(value) {
   return trimmed.length ? trimmed : undefined;
 }
 
+async function sendViaSmtp2go(payload) {
+  const res = await fetch(SMTP2GO_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Smtp2go-Api-Key": process.env.SMTP2GO_API_KEY,
+    },
+    body: JSON.stringify({
+      sender: process.env.SMTP_FROM || "no-reply@haberfielddentists.com.au",
+      to: [INTAKE_ADDRESS],
+      subject: "Website form submission",
+      text_body: JSON.stringify(payload),
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  const succeeded = data && data.data && data.data.succeeded;
+  if (!res.ok || !succeeded) {
+    const detail =
+      (data && data.data && (data.data.error || JSON.stringify(data.data.failures))) ||
+      `HTTP ${res.status}`;
+    throw new Error(`SMTP2GO send failed: ${detail}`);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!process.env.SMTP2GO_API_KEY) {
+    console.error("SMTP2GO_API_KEY is not configured");
+    return res.status(500).json({ error: "Sending service not configured" });
   }
 
   const body = req.body || {};
@@ -28,12 +59,10 @@ export default async function handler(req, res) {
   const email = clean(body.email);
   const phoneNumber = clean(body.phoneNumber);
 
-  // Required fields
   if (!firstName || !lastName || !email || !phoneNumber) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  // Basic shape checks
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: "Invalid email" });
   }
@@ -49,41 +78,22 @@ export default async function handler(req, res) {
     submittedAt: new Date().toISOString(),
   };
 
-  // Strip undefined keys so the intake only stores what was provided
   Object.keys(payload).forEach(
     (k) => payload[k] === undefined && delete payload[k]
   );
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: true, // TLS enforced — required by SmileOx intake
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  const send = () =>
-    transporter.sendMail({
-      to: INTAKE_ADDRESS,
-      from: process.env.SMTP_FROM || "no-reply@haberfielddentists.com.au",
-      subject: "Website form submission",
-      text: JSON.stringify(payload),
-    });
-
-  // One retry on transient SMTP failure
+  // One retry on transient failure
   try {
     try {
-      await send();
+      await sendViaSmtp2go(payload);
     } catch (firstErr) {
-      console.warn("SMTP first attempt failed, retrying:", firstErr.message);
+      console.warn("First attempt failed, retrying:", firstErr.message);
       await new Promise((r) => setTimeout(r, 1500));
-      await send();
+      await sendViaSmtp2go(payload);
     }
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error("SMTP send failed:", err.message);
+    console.error(err.message);
     return res.status(502).json({ error: "Failed to deliver submission" });
   }
 }
